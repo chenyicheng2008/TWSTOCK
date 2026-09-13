@@ -1,0 +1,7 @@
+# 統一 LF：Windows 與 Linux(Actions) 產出的換行不同，
+# 不統一的話第一次雲端 commit 會把每個 CSV 的每一行都判定為變更
+*.csv  text eol=lf
+*.py   text eol=lf
+*.json text eol=lf
+*.yml  text eol=lf
+*.md   text eol=lf

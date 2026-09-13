@@ -1,0 +1,18 @@
+# 合併總表：每日發布到 Release「latest」，不進 git 歷史（避免 repo 膨脹）
+tw_all_weekly.csv
+tw_all_daily_1yr.csv
+*.csv.gz
+
+# 備份與暫存
+*.bak*
+__pycache__/
+*.pyc
+daily_hy/
+weekly_hy/
+daily_yf/
+weekly_yf/
+sync_local.log
+
+# 本機金鑰（金鑰只放環境變數 / GitHub Secrets）
+.env
+secrets*.json

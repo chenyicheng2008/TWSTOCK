@@ -1,0 +1,61 @@
+name: update-data
+
+on:
+  schedule:
+    - cron: '30 10 * * 1-5'   # 台灣時間 週一~週五 18:30（GitHub 排程尖峰時可能延遲數十分鐘）
+  workflow_dispatch:           # 可在 Actions 頁面手動觸發
+
+permissions:
+  contents: write              # commit 資料 + 發布 Release
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      TZ: Asia/Taipei
+      PYTHONUNBUFFERED: '1'
+      PYTHONIOENCODING: utf-8
+      FUGLE_API_KEY: ${{ secrets.FUGLE_API_KEY }}
+      FINLAB_TOKEN: ${{ secrets.FINLAB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Rebuild data
+        run: python tw_rebuild_hybrid.py
+
+      - name: Commit per-symbol data
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898699+github-actions[bot]@users.noreply.github.com"
+          git add daily weekly tw_weekly_indicators.csv tw_monthly_indicators.csv tw_market_category.csv
+          if git diff --cached --quiet; then
+            echo "資料無變動，略過 commit"
+          else
+            git commit -m "data: $(date '+%F %H:%M') 自動更新"
+            git push
+          fi
+
+      - name: Publish merged CSVs to release "latest"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gzip -kf tw_all_weekly.csv tw_all_daily_1yr.csv
+          gh release view latest >/dev/null 2>&1 || \
+            gh release create latest --title "Latest data" --notes "每日自動更新的合併總表"
+          gh release upload latest --clobber \
+            tw_all_weekly.csv.gz tw_all_daily_1yr.csv.gz \
+            tw_weekly_indicators.csv tw_monthly_indicators.csv
+          gh release edit latest --notes "更新於 $(date '+%F %H:%M')（台灣時間）"
