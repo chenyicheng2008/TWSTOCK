@@ -45,7 +45,9 @@ jobs:
         run: |
           if [ -n "$FUGLE_API_KEY" ]; then f="已設定(${#FUGLE_API_KEY}字)"; else f="未設定"; fi
           if [ -n "$FINLAB_TOKEN" ]; then l="已設定(${#FINLAB_TOKEN}字)"; else l="未設定"; fi
-          code() { curl -s -o /dev/null -m 30 -w "%{http_code}" "$@" || true; }
+          # 附上 curl 錯誤碼：35=TLS 錯誤、56=連線被重置、28=逾時、6/7=解析或連線失敗
+          code() { local o rc; o=$(curl -s -o /dev/null -m 30 -w "%{http_code}" "$@"); rc=$?
+                   if [ "$rc" -ne 0 ]; then echo "${o}(curl錯誤$rc)"; else echo "$o"; fi; }
           frm=$(date -d '10 days ago' +%F); to=$(date +%F)
           tw=$(code https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL)
           tp=$(code --compressed https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes)
