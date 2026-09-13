@@ -83,10 +83,27 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set +e
           gzip -kf tw_all_weekly.csv tw_all_daily_1yr.csv
-          gh release view latest >/dev/null 2>&1 || \
-            gh release create latest --title "Latest data" --notes "每日自動更新的合併總表"
-          gh release upload latest --clobber \
-            tw_all_weekly.csv.gz tw_all_daily_1yr.csv.gz \
-            tw_weekly_indicators.csv tw_monthly_indicators.csv
-          gh release edit latest --notes "更新於 $(date '+%F %H:%M')（台灣時間）"
+          files="tw_all_weekly.csv.gz tw_all_daily_1yr.csv.gz tw_weekly_indicators.csv tw_monthly_indicators.csv"
+          ls -l $files >>pub.log 2>&1
+          notes="更新於 $(date '+%F %H:%M')（台灣時間）"
+          ok=0
+          for i in 1 2 3; do
+            if gh release view latest >/dev/null 2>&1; then
+              # 已存在：覆蓋附件後更新說明
+              gh release upload latest $files --clobber >>pub.log 2>&1 &&                 gh release edit latest --notes "$notes" >>pub.log 2>&1 && ok=1
+            else
+              # 不存在：建立與上傳用同一個指令，避免「剛建立就上傳」的時間差
+              gh release create latest $files --title "Latest data" --notes "$notes" >>pub.log 2>&1 && ok=1
+            fi
+            [ "$ok" = 1 ] && break
+            echo "第 $i 次失敗，15 秒後重試" >>pub.log
+            sleep 15
+          done
+          cat pub.log
+          if [ "$ok" != 1 ]; then
+            msg=$(tail -n 25 pub.log | awk '{gsub(/%/,"%25"); printf "%s%%0A", $0}')
+            echo "::error title=Publish release failed::${msg}"
+            exit 1
+          fi
