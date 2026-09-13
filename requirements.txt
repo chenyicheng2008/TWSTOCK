@@ -1,5 +1,7 @@
-pandas>=2.2
-numpy
-yfinance>=0.2.61
-finlab
-pyarrow
+# 鎖定為本機實測過的版本（不鎖的話雲端會裝到 pandas 3 / yfinance 1.x 等新大版本）
+pandas==2.3.3
+numpy==2.4.6        # 2.4.0 已被 PyPI 撤回（yanked）
+yfinance==0.2.61
+curl_cffi==0.11.1   # yfinance 的連線套件
+finlab==2.0.14
+pyarrow==25.0.1

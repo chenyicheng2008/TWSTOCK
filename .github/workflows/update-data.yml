@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: '30 10 * * 1-5'   # 台灣時間 週一~週五 18:30（GitHub 排程尖峰時可能延遲數十分鐘）
   workflow_dispatch:           # 可在 Actions 頁面手動觸發
+  push:                        # 程式或 workflow 有修改時自動驗證一次
+    branches: [main]           # （機器人用 GITHUB_TOKEN 提交的資料 commit 不會觸發）
+    paths:
+      - '**.py'
+      - 'requirements.txt'
+      - '.github/workflows/**'
 
 permissions:
   contents: write              # commit 資料 + 發布 Release
@@ -23,9 +29,9 @@ jobs:
       FUGLE_API_KEY: ${{ secrets.FUGLE_API_KEY }}
       FINLAB_TOKEN: ${{ secrets.FINLAB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
@@ -33,8 +39,31 @@ jobs:
       - name: Install
         run: pip install -r requirements.txt
 
+      # 診斷結果寫成 annotation：公開 repo 的 annotation 不用登入即可讀取（log 需要登入）
+      # 金鑰只記錄「是否設定 + 長度」，不輸出內容
+      - name: Diagnose
+        run: |
+          if [ -n "$FUGLE_API_KEY" ]; then f="已設定(${#FUGLE_API_KEY}字)"; else f="未設定"; fi
+          if [ -n "$FINLAB_TOKEN" ]; then l="已設定(${#FINLAB_TOKEN}字)"; else l="未設定"; fi
+          code() { curl -s -o /dev/null -m 30 -w "%{http_code}" "$@" || true; }
+          frm=$(date -d '10 days ago' +%F); to=$(date +%F)
+          tw=$(code https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL)
+          tp=$(code --compressed https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes)
+          fg=$(code -H "X-API-KEY: $FUGLE_API_KEY" "https://api.fugle.tw/marketdata/v1.0/stock/historical/candles/2330?timeframe=D&from=$frm&to=$to")
+          yf=$(code -A "Mozilla/5.0" "https://query1.finance.yahoo.com/v8/finance/chart/2330.TW?range=5d&interval=1d")
+          echo "::notice title=Diagnose::FUGLE_API_KEY=$f FINLAB_TOKEN=$l | HTTP TWSE=$tw TPEx=$tp Fugle=$fg Yahoo=$yf"
+
       - name: Rebuild data
-        run: python tw_rebuild_hybrid.py
+        run: |
+          set +e
+          python tw_rebuild_hybrid.py 2>&1 | tee run.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            msg=$(grep -v -e 'possibly delisted' -e 'Length mismatch' run.log | tail -n 25 \
+                  | awk '{gsub(/%/,"%25"); printf "%s%%0A", $0}')
+            echo "::error title=Rebuild data failed (exit $rc)::${msg}"
+          fi
+          exit $rc
 
       - name: Commit per-symbol data
         run: |
