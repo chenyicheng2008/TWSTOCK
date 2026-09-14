@@ -61,8 +61,10 @@ def main():
     # 1. git pull（網路瞬斷時重試：09-14 曾出現 fetch-pack unexpected disconnect）
     env = dict(os.environ, GIT_TERMINAL_PROMPT='0')     # 不跳互動式登入，避免卡住
     for k in range(1, 4):
+        # CREATE_NO_WINDOW：排程以 pythonw 執行時，git 不另開主控台視窗（視窗被關掉會中止同步）
         r = subprocess.run(['git', '-C', HERE, 'pull', '--ff-only', '-q'],
-                           capture_output=True, text=True, env=env)
+                           capture_output=True, text=True, env=env,
+                           creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         if r.returncode == 0:
             log('  ✓ git pull' + (f'（第 {k} 次成功）' if k > 1 else ''))
             break
