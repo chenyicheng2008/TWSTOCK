@@ -9,7 +9,7 @@
   python sync_local.py                 # 同步到預設 TARGET
   python sync_local.py --target D:/data  # 同步到其他資料夾
 """
-import argparse, datetime, gzip, os, shutil, subprocess, sys, urllib.request
+import argparse, datetime, gzip, os, shutil, subprocess, sys, time, urllib.request
 
 REPO = 'chenyicheng2008/TWSTOCK'
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -58,14 +58,19 @@ def main():
     log(f'開始同步 → {a.target}')
     ok = True
 
-    # 1. git pull
-    r = subprocess.run(['git', '-C', HERE, 'pull', '--ff-only', '-q'],
-                       capture_output=True, text=True)
-    if r.returncode:
-        log(f'  ✗ git pull 失敗: {(r.stderr or r.stdout).strip()[:200]}')
-        ok = False
+    # 1. git pull（網路瞬斷時重試：09-14 曾出現 fetch-pack unexpected disconnect）
+    env = dict(os.environ, GIT_TERMINAL_PROMPT='0')     # 不跳互動式登入，避免卡住
+    for k in range(1, 4):
+        r = subprocess.run(['git', '-C', HERE, 'pull', '--ff-only', '-q'],
+                           capture_output=True, text=True, env=env)
+        if r.returncode == 0:
+            log('  ✓ git pull' + (f'（第 {k} 次成功）' if k > 1 else ''))
+            break
+        log(f'  ✗ git pull 第 {k} 次失敗: {(r.stderr or r.stdout).strip()[:200]}')
+        if k < 3:
+            time.sleep(10)
     else:
-        log('  ✓ git pull')
+        ok = False
 
     # 2. 個股檔：repo → TARGET
     for d in ('daily', 'weekly'):
