@@ -50,6 +50,13 @@ RAW_SOURCES = (
     ('TPEx', TPEX_ALL, 'SecuritiesCompanyCode', 'Close', True),
 )
 
+# fetch_raw_close() 順便記下每檔屬於哪個官方清單（TWSE=上市、TPEx=上櫃），
+# 供 main() 校正 yfinance 後綴
+MARKET_OF = {}
+# 市場別快取：TPEx 常在傳輸途中斷線，某市場當天抓不到時改用快取校正後綴
+MARKET_CACHE = f'{BASE}/market_of.json'
+YF_SUFFIX_BY_SOURCE = {'TWSE': '.TW', 'TPEx': '.TWO'}
+
 
 def _roc_to_date(s):
     """民國日期字串 1150827 → Timestamp('2026-08-27')"""
@@ -118,14 +125,29 @@ def fetch_raw_close():
     只有失敗的那個市場才需要退回 FinLab。
     """
     raw, failed = {}, []
+    try:
+        with open(MARKET_CACHE, encoding='utf-8') as f:
+            cache = json.load(f)
+    except (OSError, ValueError):
+        cache = {}
     for name, url, code_key, close_key, lax in RAW_SOURCES:
         try:
             got = _fetch_one(url, code_key, close_key, lax)
             raw.update(got)
+            MARKET_OF.update(dict.fromkeys(got, name))
             print(f'  {name}: {len(got)} 檔', flush=True)
         except Exception as e:
             failed.append(name)
             print(f'  {name}: 失敗（{str(e)[:70]}）', flush=True)
+            # 只借用市場別校正 yfinance 後綴，不當價格錨點（快取沒有當天收盤價）
+            old = {s: m for s, m in cache.items() if m == name}
+            MARKET_OF.update(old)
+            if old:
+                print(f'    改用快取的 {name} 市場別 {len(old)} 檔（僅用於校正後綴）', flush=True)
+    if len(failed) < len(RAW_SOURCES):      # 至少一個市場成功才寫回；失敗市場保留舊值
+        cache.update(MARKET_OF)
+        with open(MARKET_CACHE, 'w', encoding='utf-8') as f:
+            json.dump(dict(sorted(cache.items())), f, ensure_ascii=False, indent=0)
     return raw, failed
 
 
@@ -262,6 +284,17 @@ def main():
             print(f'  FinLab 備援也失敗（{str(e)[:60]}）', flush=True)
     if not raw:
         sys.exit('錨點來源全數失敗，中止（未動用 yfinance）')
+
+    # 依官方清單校正 yfinance 後綴（上市 .TW / 上櫃 .TWO）
+    # 市場別對照表（FinLab）沒收錄的新上市股票，原本一律預設 .TW，只能靠
+    # 「反向後綴重試」補救；重試失敗時整檔漏抓（09-14 有 29 檔上櫃股因此停在前一日）
+    fixed = 0
+    for i, (s, tk) in enumerate(pairs):
+        want = YF_SUFFIX_BY_SOURCE.get(MARKET_OF.get(s))
+        if want and tk != s + want:
+            pairs[i] = (s, s + want)
+            fixed += 1
+    print(f'  依官方清單校正 yfinance 後綴: {fixed} 檔', flush=True)
 
     # ── 1. yfinance 全市場長歷史 ────────────────────────────────────
     print(f'[1/3] yfinance 下載 {len(pairs)} 檔…', flush=True)

@@ -97,7 +97,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898699+github-actions[bot]@users.noreply.github.com"
-          git add daily weekly tw_weekly_indicators.csv tw_monthly_indicators.csv tw_market_category.csv
+          git add daily weekly tw_weekly_indicators.csv tw_monthly_indicators.csv tw_market_category.csv market_of.json
           if git diff --cached --quiet; then
             echo "資料無變動，略過 commit"
           else
