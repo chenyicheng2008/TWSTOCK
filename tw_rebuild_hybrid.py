@@ -192,10 +192,27 @@ def pick_candidates(prepared, raw, tol=0.005):
     cnt = Counter(d.index[-1] for d in prepared.values() if len(d))
     min_support = max(5, int(0.01 * sum(cnt.values())))
     ok_days = [dt for dt, n in cnt.items() if n >= min_support]
-    market_last = max(ok_days) if ok_days else None
+    yf_last = max(ok_days) if ok_days else None
+
+    # yfinance 可能整批落後（凌晨執行時常整個市場都少最新一天），此時上面的日期本身
+    # 就是落後日，落後的個股無法被判定為 stale（09-15~09-17 上市股因此每天慢一天）。
+    # 改取下列來源的最大值：
+    #   - 官方錨點日（TPEx 通常是最新；TWSE OpenAPI 本身常晚一天）
+    #   - Fugle 2330 的最新交易日（Fugle 上市資料收盤後即更新）
+    srcs = {'yfinance': yf_last}
+    if raw:
+        srcs['官方錨點'] = max(d for d, _ in raw.values())
+    today = pd.Timestamp.today()
+    probe = fugle_daily('2330', (today - pd.Timedelta(days=10)).strftime('%Y-%m-%d'),
+                        today.strftime('%Y-%m-%d'))
+    if probe:
+        srcs['Fugle 2330'] = pd.Timestamp(probe[-1]['date'][:10])
+    found = [d for d in srcs.values() if d is not None]
+    market_last = max(found) if found else None
     if market_last is not None:
-        print(f'  全市場最新交易日: {market_last.date()} '
-              f'({cnt[market_last]} 檔已到，門檻 {min_support})', flush=True)
+        print('  全市場最新交易日: ' + str(market_last.date()) + '（' +
+              '、'.join(f'{k} {v.date()}' for k, v in srcs.items() if v is not None) +
+              f'；yfinance 已到 {cnt.get(market_last, 0)} 檔）', flush=True)
 
     cands, checked, stale = [], 0, 0
     for s, d in prepared.items():

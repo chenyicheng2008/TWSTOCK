@@ -35,7 +35,9 @@ jobs:
         run: |
           today=$(date +%F)
           body=$(gh release view latest --json body -q .body 2>/dev/null || true)
-          if [ "${{ github.event_name }}" = "schedule" ] && echo "$body" | grep -q "更新於 $today"; then
+          # 比對「資料日期」而非「更新時間」：GitHub 排程常延遲到隔天凌晨，
+          # 用更新時間判斷會把隔天晚上真正該跑的那次誤判為已更新（09-15~09-17 每天因此慢一天）
+          if [ "${{ github.event_name }}" = "schedule" ] && echo "$body" | grep -q "資料日期 $today"; then
             echo "今天（$today）已更新過，這次排程略過"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
@@ -113,7 +115,7 @@ jobs:
           gzip -kf tw_all_weekly.csv tw_all_daily_1yr.csv
           files="tw_all_weekly.csv.gz tw_all_daily_1yr.csv.gz tw_weekly_indicators.csv tw_monthly_indicators.csv"
           ls -l $files >>pub.log 2>&1
-          notes="更新於 $(date '+%F %H:%M')（台灣時間）"
+          notes="更新於 $(date '+%F %H:%M')（台灣時間）｜資料日期 $(tail -n 1 daily/2330.csv | cut -d, -f1)"
           ok=0
           for i in 1 2 3; do
             if gh release view latest >/dev/null 2>&1; then
