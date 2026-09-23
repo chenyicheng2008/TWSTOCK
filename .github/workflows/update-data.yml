@@ -97,14 +97,29 @@ jobs:
 
       - name: Commit per-symbol data
         run: |
+          set +e
           git config user.name  "github-actions[bot]"
           git config user.email "41898699+github-actions[bot]@users.noreply.github.com"
           git add daily weekly tw_weekly_indicators.csv tw_monthly_indicators.csv tw_market_category.csv market_of.json
           if git diff --cached --quiet; then
             echo "資料無變動，略過 commit"
-          else
-            git commit -m "data: $(date '+%F %H:%M') 自動更新"
-            git push
+            exit 0
+          fi
+          git commit -q -m "data: $(date '+%F %H:%M') 自動更新"
+          # 兩趟執行時間重疊時，對方會先推送而讓本次落後（09-21 01:08 那趟即因此失敗）
+          # 因此推送前先 rebase，並重試
+          ok=0
+          for i in 1 2 3; do
+            git pull --rebase -q >>push.log 2>&1 || git rebase --abort >>push.log 2>&1
+            if git push -q >>push.log 2>&1; then ok=1; break; fi
+            echo "第 $i 次推送失敗，10 秒後重試" >>push.log
+            sleep 10
+          done
+          cat push.log
+          if [ "$ok" != 1 ]; then
+            msg=$(tail -n 20 push.log | awk '{gsub(/%/,"%25"); printf "%s%%0A", $0}')
+            echo "::error title=Commit/push failed::${msg}"
+            exit 1
           fi
 
       - name: Publish merged CSVs to release "latest"
