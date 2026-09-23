@@ -1,10 +1,10 @@
 name: update-data
 
 on:
-  schedule:                    # GitHub 排程只是「盡力而為」：可能延遲，也可能整次被略過（09-14 就沒觸發）
-    - cron: '30 10 * * 1-5'    # 台灣時間 週一~週五 18:30（主要）
-    - cron: '30 11 * * 1-5'    # 19:30（備援）
-    - cron: '30 13 * * 1-5'    # 21:30（備援）；今天已更新過的話，備援會自動略過
+  schedule:
+    # cron 為 UTC：UTC 週一~週五 18:30 = 台灣週二~週六 02:30，
+    # 對應週一~週五每個交易日收盤後的更新
+    - cron: '30 18 * * 1-5'
   workflow_dispatch:           # 可在 Actions 頁面手動觸發
   push:                        # 程式或 workflow 有修改時自動驗證一次
     branches: [main]           # （機器人用 GITHUB_TOKEN 提交的資料 commit 不會觸發）
