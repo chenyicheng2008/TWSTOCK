@@ -4,7 +4,8 @@ on:
   schedule:
     # cron 為 UTC：UTC 週一~週五 18:30 = 台灣週二~週六 02:30，
     # 對應週一~週五每個交易日收盤後的更新
-    - cron: '30 18 * * 1-5'
+    - cron: '30 18 * * 1-5'    # 主要
+    - cron: '30 20 * * 1-5'    # 台灣 04:30 備援；當天已更新過會自動略過
   workflow_dispatch:           # 可在 Actions 頁面手動觸發
   push:                        # 程式或 workflow 有修改時自動驗證一次
     branches: [main]           # （機器人用 GITHUB_TOKEN 提交的資料 commit 不會觸發）
