@@ -28,18 +28,27 @@ jobs:
     outputs:
       skip: ${{ steps.g.outputs.skip }}
     steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: latest_trading_day.py
+          sparse-checkout-cone-mode: false
+
       - id: g
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TZ: Asia/Taipei
         run: |
-          today=$(date +%F)
+          # 官方最新交易日：TWSE 與 TPEx 取較新者（TWSE 常慢一天）
+          off=$(python3 latest_trading_day.py || true)
           body=$(gh release view latest --json body -q .body 2>/dev/null || true)
-          # 比對「資料日期」而非「更新時間」：GitHub 排程常延遲到隔天凌晨，
-          # 用更新時間判斷會把隔天晚上真正該跑的那次誤判為已更新（09-15~09-17 每天因此慢一天）
-          if [ "${{ github.event_name }}" = "schedule" ] && echo "$body" | grep -q "資料日期 $today"; then
-            echo "今天（$today）已更新過，這次排程略過"
+          # Release 說明形如「更新於 … ｜資料日期 2026-11-26」，取其中最後一個日期
+          have=$(echo "$body" | grep -oE "[0-9]{4}-[0-9]{2}-[0-9]{2}" | tail -1)
+          echo "官方最新交易日=$off  現有資料日期=$have"
+          # 原本比對「今天」：盤中跑出的未完成 K 棒其資料日期等於今天，備援排程會被
+          # 誤判為已完成而略過，盤中價就被鎖定（11-25、11-26 即如此）
+          if [ "${{ github.event_name }}" = "schedule" ] && [ -n "$off" ] && [ "$have" = "$off" ]; then
+            echo "資料日期已達官方最新交易日 $off，這次排程略過"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "觸發方式 ${{ github.event_name }}，執行更新（Release 目前：$body）"

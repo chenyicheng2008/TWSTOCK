@@ -345,6 +345,17 @@ def main():
             print('  最慢個股: ' + ', '.join(f'{s}={d:.0f}s' for d, s in slow), flush=True)
 
     # ── 3. 寫檔 + 指標 ──────────────────────────────────────────────
+    # 盤中保護：台股 13:30 收盤。GitHub 排程延遲可達 7 小時以上，02:30 的排程曾落在
+    # 09:52 執行，把未完成的盤中 K 棒當成當日收盤寫出（11-25、11-26 即如此）。
+    # 因此 14:00 前一律丟棄「今日」那根，當日收盤由隔天的排程補上。
+    now = pd.Timestamp.now()          # workflow 已設 TZ=Asia/Taipei
+    if now.hour < 14:
+        t0 = now.normalize()
+        n = sum(1 for d in prepared.values() if len(d) and d.index[-1] == t0)
+        if n:
+            prepared = {k: (d[d.index < t0] if len(d) else d) for k, d in prepared.items()}
+            print(f'  盤中保護：尚未收盤，丟棄 {t0.date()} 未完成 K 棒 {n} 檔', flush=True)
+
     print(f'[3/3] 寫出與計算指標…', flush=True)
     keep = pd.Timestamp.today() - pd.Timedelta(days=420)
     wk_rows, mo_rows, wrote = [], [], 0
